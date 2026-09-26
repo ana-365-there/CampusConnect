@@ -1,3 +1,5 @@
+// TODO: Remove the placeholder getActiveEvents() once Person C's branch is merged into dev — do not keep two copies of this function.
+
 export type EventCategory =
   | 'Tech'
   | 'Cultural'
@@ -235,34 +237,42 @@ export function getEventById(id: string): CampusEvent | undefined {
   return events.find((event) => event.id === id)
 }
 
+// TEMP: placeholder for Person C's function, remove this when dev is merged with C's branch — do not modify this function's logic locally.
+/** Returns only events that have not been cancelled. */
+export function getActiveEvents(): CampusEvent[] {
+  return events.filter((e) => !e.cancelled)
+}
+
 /**
- * PARTICIPANT TASK (Task 1 — Event Listing):
- *
- * This is a stub. Right now it ignores `query` completely and just
- * returns every event, which is why `tests/search.test.ts` is failing.
- *
- * You need to make this do a case-insensitive, partial match on
- * `event.name` — e.g. "hack" should match "Hack the Campus 2026".
+ * Filters out past and cancelled events from the event list.
+ */
+export function filterUpcomingEvents(): CampusEvent[] {
+  return getActiveEvents().filter((event) => !isPastEvent(event))
+}
+
+/**
+ * Performs a case-insensitive, partial match on event.name.
+ * If query is empty or only whitespace, returns eventList unchanged.
  */
 export function searchEventsByName(
   eventList: CampusEvent[],
   query: string,
 ): CampusEvent[] {
-  // TODO(participant): implement case-insensitive partial name search.
-  return eventList
+  const trimmed = query.trim().toLowerCase()
+  if (!trimmed) return eventList
+  return eventList.filter((event) =>
+    event.name.toLowerCase().includes(trimmed),
+  )
 }
 
 /**
- * PARTICIPANT TASK (Task 1 — Event Listing):
- *
- * This is a stub. Right now it ignores `category` and returns every
- * event unchanged. You need to filter by exact category match, and
- * make sure it composes with searchEventsByName above.
+ * Filters events by category.
+ * If category is 'All' or undefined, returns eventList unchanged.
  */
 export function filterEventsByCategory(
   eventList: CampusEvent[],
   category: EventCategory | 'All',
 ): CampusEvent[] {
-  // TODO(participant): implement category filtering.
-  return eventList
+  if (!category || category === 'All') return eventList
+  return eventList.filter((event) => event.category === category)
 }
