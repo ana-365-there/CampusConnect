@@ -22,9 +22,9 @@ function formatTime(iso: string) {
 export default function EventDetailPage({
   params,
 }: {
-  params: { id: string }
+  params?: { id?: string }
 }) {
-  const event = getEventById(params.id)
+  const event = params?.id ? getEventById(params.id) : undefined
 
   if (!event || event.cancelled) {
     return (
