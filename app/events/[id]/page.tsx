@@ -1,7 +1,12 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { getEventById, isPastEvent, isFullEvent } from '@/data/events'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/components/AuthProvider'
 import StatusBadge from '@/components/StatusBadge'
 import EmptyState from '@/components/EmptyState'
+import { CampusEvent } from '@/data/events'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-IN', {
@@ -24,9 +29,66 @@ export default function EventDetailPage({
 }: {
   params?: { id?: string }
 }) {
-  const event = params?.id ? getEventById(params.id) : undefined
+  const router = useRouter()
+  const { currentUser } = useAuth()
+  const [eventData, setEventData] = useState<{
+    event: CampusEvent
+    isRegistered: boolean
+    isPast: boolean
+    isFull: boolean
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [message, setMessage] = useState<{
+    type: 'success' | 'error'
+    text: string
+  } | null>(null)
 
-  if (!event || event.cancelled) {
+  const eventId = params?.id
+
+  const fetchServerData = useCallback(async () => {
+    if (!eventId) {
+      setNotFound(true)
+      setLoading(false)
+      return
+    }
+    try {
+      const studentId = currentUser?.id || ''
+      const res = await fetch(`/api/events/${eventId}?studentId=${studentId}`, {
+        cache: 'no-store',
+      })
+      if (!res.ok) {
+        setNotFound(true)
+      } else {
+        const data = await res.json()
+        if (!data.event) {
+          setNotFound(true)
+        } else {
+          setEventData(data)
+          setNotFound(false)
+        }
+      }
+    } catch (err) {
+      setNotFound(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [eventId, currentUser?.id])
+
+  useEffect(() => {
+    fetchServerData()
+  }, [fetchServerData])
+
+  if (loading) {
+    return (
+      <section className="shell" style={{ padding: '56px 0' }}>
+        <p>Loading event details...</p>
+      </section>
+    )
+  }
+
+  if (notFound || !eventData || !eventData.event) {
     return (
       <section className="shell" style={{ padding: '56px 0' }}>
         <EmptyState
@@ -42,16 +104,103 @@ export default function EventDetailPage({
     )
   }
 
-  const past = isPastEvent(event)
-  const full = isFullEvent(event)
+  const { event, isRegistered, isPast, isFull } = eventData
+  const isStudent = currentUser?.role === 'student'
+
   const status = event.cancelled
     ? 'cancelled'
-    : past
+    : isPast
       ? 'past'
-      : full
+      : isFull
         ? 'full'
         : 'open'
-  const canRegister = !past && !full && !event.cancelled
+
+  const canRegister =
+    isStudent &&
+    !isPast &&
+    !isFull &&
+    !event.cancelled &&
+    !isRegistered &&
+    !submitting
+
+  async function handleRegister() {
+    setMessage(null)
+
+    if (!isStudent) {
+      setMessage({
+        type: 'error',
+        text: 'Must be logged in as a student to register for events.',
+      })
+      return
+    }
+
+    if (event.cancelled) {
+      setMessage({
+        type: 'error',
+        text: 'Registration is closed because this event has been cancelled.',
+      })
+      return
+    }
+
+    if (isPast) {
+      setMessage({
+        type: 'error',
+        text: 'Registration is closed because this event has already passed.',
+      })
+      return
+    }
+
+    if (isFull) {
+      setMessage({
+        type: 'error',
+        text: 'Registration is closed because this event is full.',
+      })
+      return
+    }
+
+    if (isRegistered) {
+      setMessage({
+        type: 'error',
+        text: 'You are already registered for this event.',
+      })
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/registrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: currentUser.id,
+          eventId: event.id,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setMessage({
+          type: 'error',
+          text: data.error || 'Failed to register.',
+        })
+      } else {
+        setMessage({
+          type: 'success',
+          text: 'Successfully registered for this event!',
+        })
+        await fetchServerData()
+        router.refresh()
+      }
+    } catch (err) {
+      setMessage({
+        type: 'error',
+        text: 'An unexpected error occurred.',
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <section className="shell" style={{ padding: '40px 0 64px' }}>
@@ -96,22 +245,72 @@ export default function EventDetailPage({
             value={`${event.seatsAvailable} of ${event.capacity} available`}
           />
 
-          {/* PARTICIPANT TASK (Task 2 — Registration): this button is a
-              placeholder. Wire it to a registration form and the
-              POST /api/registrations route, and make sure it respects
-              login state, duplicate registrations, full events, and
-              past/cancelled events. */}
+          {!isStudent && (
+            <div
+              style={{
+                fontSize: 13,
+                color: 'var(--rust)',
+                background: 'var(--rust-bg)',
+                padding: '8px 12px',
+                borderRadius: 'var(--radius)',
+              }}
+            >
+              Must be logged in as a student to register for events.
+            </div>
+          )}
+
+          {isRegistered && (
+            <div
+              style={{
+                fontSize: 13,
+                color: 'var(--green)',
+                background: 'var(--green-bg)',
+                padding: '8px 12px',
+                borderRadius: 'var(--radius)',
+              }}
+            >
+              You are registered for this event.
+            </div>
+          )}
+
+          {message && (
+            <div
+              style={{
+                fontSize: 13.5,
+                fontWeight: 500,
+                color:
+                  message.type === 'error'
+                    ? 'var(--rust)'
+                    : 'var(--green)',
+                background:
+                  message.type === 'error'
+                    ? 'var(--rust-bg)'
+                    : 'var(--green-bg)',
+                padding: '10px 14px',
+                borderRadius: 'var(--radius)',
+              }}
+            >
+              {message.text}
+            </div>
+          )}
+
           <button
             className="btn btn-primary"
+            onClick={handleRegister}
             disabled={!canRegister}
             style={{ marginTop: 4 }}
-            title="Registration isn't wired up yet — that's Task 2"
           >
-            {canRegister
-              ? 'Register'
-              : status === 'full'
-                ? 'Event full'
-                : 'Registration closed'}
+            {submitting
+              ? 'Registering...'
+              : isRegistered
+                ? 'Already registered'
+                : canRegister
+                  ? 'Register'
+                  : status === 'full'
+                    ? 'Event full'
+                    : !isStudent
+                      ? 'Register (Student required)'
+                      : 'Registration closed'}
           </button>
         </aside>
       </div>
