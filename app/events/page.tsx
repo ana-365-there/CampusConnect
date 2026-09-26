@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { events, EventCategory } from '@/data/events'
+import { getActiveEvents, EventCategory } from '@/data/events'
 import EventCard from '@/components/EventCard'
 
 const CATEGORIES: (EventCategory | 'All')[] = [
@@ -77,7 +77,7 @@ export default function EventsPage() {
           gap: 16,
         }}
       >
-        {events.map((event) => (
+        {getActiveEvents().map((event) => (
           <EventCard key={event.id} event={event} />
         ))}
       </div>

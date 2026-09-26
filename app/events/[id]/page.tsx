@@ -26,7 +26,7 @@ export default function EventDetailPage({
 }) {
   const event = getEventById(params.id)
 
-  if (!event) {
+  if (!event || event.cancelled) {
     return (
       <section className="shell" style={{ padding: '56px 0' }}>
         <EmptyState
